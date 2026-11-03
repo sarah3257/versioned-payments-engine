@@ -1,0 +1,8 @@
+**/bin
+**/obj
+**/data
+.vs
+.git
+.vercel
+test-results
+**/*.db*

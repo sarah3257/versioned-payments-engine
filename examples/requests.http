@@ -1,0 +1,55 @@
+@base = http://127.0.0.1:5088
+
+### Inspect the actual tables
+GET {{base}}/api/schema
+
+### Calculate once; repeat the same body to test idempotency
+POST {{base}}/api/calculations
+Content-Type: application/json
+
+{
+  "requestKey": "example-september-500",
+  "modelId": 1,
+  "institution": 3404,
+  "placementId": "500",
+  "eventDate": "2026-09-15",
+  "ownership": "Private",
+  "institutionType": "דירה",
+  "supportLevel": 4,
+  "monthlyFactor": 1
+}
+
+### Publish an independent component revision (send once)
+POST {{base}}/api/components/publish
+Content-Type: application/json
+
+{
+  "componentId": 1,
+  "version": 4,
+  "name": "אחזקה נובמבר",
+  "kind": "Maintenance",
+  "from": "2026-11-01",
+  "to": "2027-12-31",
+  "items": [
+    { "priceKey": "clothes", "factor": 1.2, "profitRequired": true, "taxLiability": "Both" },
+    { "priceKey": "municipal", "factor": 0.9, "profitRequired": true, "taxLiability": "Both" }
+  ],
+  "rows": []
+}
+
+### New model, existing components, no C# change
+POST {{base}}/api/models/publish
+Content-Type: application/json
+
+{
+  "modelId": 2,
+  "version": 1,
+  "name": "מודל נוסף",
+  "from": "2026-01-01",
+  "to": "2027-12-31",
+  "components": [
+    { "componentId": 1, "layer": 1, "order": 1 },
+    { "componentId": 10, "layer": 6, "order": 1 },
+    { "componentId": 11, "layer": 7, "order": 1 }
+  ]
+}
