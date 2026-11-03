@@ -65,6 +65,42 @@ app.MapGet("/api/schema", (EngineDb db) => db.Model.GetEntityTypes().Select(e =>
     table = e.GetTableName(), columns = e.GetProperties().Select(p => new { name = p.Name, type = p.ClrType.Name, nullable = p.IsNullable }),
     relations = e.GetForeignKeys().Select(f => new { columns = f.Properties.Select(p => p.Name), target = f.PrincipalEntityType.GetTableName() })
 }));
+app.MapGet("/api/database/{table}", async (string table, int? page, EngineDb db, CancellationToken ct) =>
+{
+    // Only mapped tables can be selected; callers never supply SQL or identifiers.
+    var entity = db.Model.GetEntityTypes().SingleOrDefault(e => e.GetTableName() == table)
+        ?? throw new BusinessException("טבלה לא נמצאה", 404);
+    int currentPage = page ?? 1;
+    if (currentPage < 1 || currentPage > 1000000) throw new BusinessException("מספר עמוד לא תקין");
+    const int size = 50;
+    string identifier = "\"" + entity.GetTableName()!.Replace("\"", "\"\"") + "\"";
+    var key = entity.FindPrimaryKey()!.Properties[0];
+    var store = Microsoft.EntityFrameworkCore.Metadata.StoreObjectIdentifier.Table(entity.GetTableName()!, entity.GetSchema());
+    string order = "\"" + key.GetColumnName(store)!.Replace("\"", "\"\"") + "\"";
+    await db.Database.OpenConnectionAsync(ct);
+    try
+    {
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        await using var command = db.Database.GetDbConnection().CreateCommand();
+        command.Transaction = Microsoft.EntityFrameworkCore.Storage.DbContextTransactionExtensions.GetDbTransaction(transaction);
+        command.CommandText = $"SELECT COUNT(*) FROM {identifier}";
+        long total = Convert.ToInt64(await command.ExecuteScalarAsync(ct));
+        command.CommandText = $"SELECT * FROM {identifier} ORDER BY {order} LIMIT @size OFFSET @offset";
+        var limit = command.CreateParameter(); limit.ParameterName = "@size"; limit.Value = size; command.Parameters.Add(limit);
+        var offset = command.CreateParameter(); offset.ParameterName = "@offset"; offset.Value = (currentPage - 1) * size; command.Parameters.Add(offset);
+        var rows = new List<Dictionary<string, object?>>();
+        await using (var reader = await command.ExecuteReaderAsync(ct))
+            while (await reader.ReadAsync(ct))
+            {
+                var row = new Dictionary<string, object?>();
+                for (int i = 0; i < reader.FieldCount; i++) row[reader.GetName(i)] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+                rows.Add(row);
+            }
+        await transaction.CommitAsync(ct);
+        return Results.Ok(new { table, page = currentPage, pageSize = size, total, rows });
+    }
+    finally { await db.Database.CloseConnectionAsync(); }
+});
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<EngineDb>();
