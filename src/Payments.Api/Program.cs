@@ -14,7 +14,7 @@ Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(dbPath))!);
 builder.Services.AddDbContext<EngineDb>(o => o.UseSqlite($"Data Source={dbPath};Foreign Keys=True;Default Timeout=30"));
 builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.AddSingleton<WriterGate>();
-builder.Services.AddScoped<PublicationService>(); builder.Services.AddScoped<PlanBuilder>(); builder.Services.AddScoped<RunService>();
+builder.Services.AddScoped<ImpactService>(); builder.Services.AddScoped<PublicationService>(); builder.Services.AddScoped<PlanBuilder>(); builder.Services.AddScoped<RunService>();
 builder.Services.AddSingleton<IComponentCalculator>(new ItemCalculator(ComponentKind.Maintenance));
 builder.Services.AddSingleton<IComponentCalculator>(new ItemCalculator(ComponentKind.Staff));
 builder.Services.AddSingleton<IComponentCalculator, BasketCalculator>();
@@ -60,6 +60,10 @@ app.MapPost("/api/consents", async (PublishConsent p, PublicationService service
 app.MapPost("/api/prices/publish", async (PublishPrice p, PublicationService service, WriterGate gate) => await Write(() => service.PublishPriceAsync(p), gate));
 app.MapPost("/api/agreements/publish", async (PublishAgreement p, PublicationService service, WriterGate gate) => await Write(() => service.PublishAgreementAsync(p), gate));
 app.MapPost("/api/tax-rates/publish", async (PublishTax p, PublicationService service, WriterGate gate) => await Write(() => service.PublishTaxAsync(p), gate));
+app.MapGet("/api/placements", async (EngineDb db) => await db.Placements.AsNoTracking().ToListAsync());
+app.MapPost("/api/impact/simulate", (ImpactRequest r, ImpactService service) => service.SimulateAsync(r));
+app.MapPost("/api/impact/consents", (ConsentBatch r, ImpactService service) => service.SaveConsentsAsync(r));
+app.MapPost("/api/impact/publish", (PublishImpactRequest r, ImpactService service) => service.SaveConsentsAsync(r.Consent, r.Draft));
 app.MapGet("/api/schema", (EngineDb db) => db.Model.GetEntityTypes().Select(e => new
 {
     table = e.GetTableName(), columns = e.GetProperties().Select(p => new { name = p.Name, type = p.ClrType.Name, nullable = p.IsNullable }),
@@ -105,7 +109,7 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<EngineDb>();
     await EngineDb.InitializeAsync(db);
-    if (builder.Configuration.GetValue("SeedDemo", true)) await DemoSeed.InitializeAsync(db);
+    if (builder.Configuration.GetValue("SeedDemo", true)) { await DemoSeed.InitializeAsync(db); await ImpactService.SeedAsync(db); }
 }
 await app.RunAsync();
 

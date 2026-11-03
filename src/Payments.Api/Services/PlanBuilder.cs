@@ -6,7 +6,7 @@ namespace Payments.Api.Services;
 
 public class PlanBuilder(EngineDb db)
 {
-    public async Task<ExecutionPlan> BuildAsync(CalculateRequest request, bool simulation)
+    public async Task<ExecutionPlan> BuildAsync(CalculateRequest request, bool simulation, ModelVersion? draft = null)
     {
         if (request.ModelId <= 0 || request.Institution <= 0 || string.IsNullOrWhiteSpace(request.PlacementId) || request.EventDate == default ||
             request.MonthlyFactor is < 0 or > 1 || request.SupportLevel <= 0 || !Enum.IsDefined(request.Ownership))
@@ -24,6 +24,7 @@ public class PlanBuilder(EngineDb db)
             // Explicit POC policy: initial model version is baseline before first consent.
             version = consent?.ModelVersion ?? models.OrderBy(m => m.Version).FirstOrDefault()?.Version;
         }
+        if (draft != null) { if (!simulation || draft.ModelId != request.ModelId) throw new BusinessException("טיוטה מותרת בסימולציה בלבד"); models.Add(draft); }
         var model = models.SingleOrDefault(m => m.Version == version && m.From <= request.EventDate && request.EventDate <= m.To)
             ?? throw new BusinessException("אין גרסת מודל מאושרת ובתוקף לתאריך האירוע");
         var ids = model.Components.Select(c => c.ComponentId).ToArray();

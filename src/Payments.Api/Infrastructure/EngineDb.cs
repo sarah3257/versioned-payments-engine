@@ -5,6 +5,7 @@ namespace Payments.Api.Infrastructure;
 
 public class EngineDb(DbContextOptions<EngineDb> options) : DbContext(options)
 {
+    public DbSet<Placement> Placements => Set<Placement>();
     public DbSet<ComponentVersion> ComponentVersions => Set<ComponentVersion>();
     public DbSet<ModelVersion> ModelVersions => Set<ModelVersion>();
     public DbSet<Consent> Consents => Set<Consent>();
@@ -42,6 +43,7 @@ public class EngineDb(DbContextOptions<EngineDb> options) : DbContext(options)
     public static async Task InitializeAsync(EngineDb db)
     {
         await db.Database.EnsureCreatedAsync();
+        await db.Database.ExecuteSqlRawAsync("CREATE TABLE IF NOT EXISTS Placements (Id TEXT NOT NULL PRIMARY KEY, ModelId INTEGER NOT NULL, Institution INTEGER NOT NULL, InstitutionName TEXT NOT NULL, \"From\" TEXT NOT NULL, \"To\" TEXT NOT NULL, Ownership INTEGER NOT NULL, InstitutionType TEXT NOT NULL, SupportLevel INTEGER NOT NULL, Administration TEXT NOT NULL, Population TEXT NOT NULL)");
         await db.Database.ExecuteSqlRawAsync("PRAGMA journal_mode=WAL;");
         // Extra DB guard: even direct SQL cannot silently rewrite published history.
         string[] tables = ["ComponentVersions", "ComponentItem", "DecisionRow", "DecisionCondition",

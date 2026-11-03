@@ -69,7 +69,7 @@ public class PublicationService(EngineDb db)
         return entity;
     }
 
-    public async Task<ModelVersion> PublishModelAsync(PublishModel p)
+    public async Task<ModelVersion> PublishModelAsync(PublishModel p, bool persist = true)
     {
         Dates(p.From, p.To);
         Require(p.ModelId > 0 && p.Version > 0 && !string.IsNullOrWhiteSpace(p.Name) && p.Components is { Count: > 0 }, "הגדרת מודל חסרה");
@@ -90,7 +90,7 @@ public class PublicationService(EngineDb db)
         }
         var entity = new ModelVersion { ModelId = p.ModelId, Version = p.Version, Name = p.Name, From = p.From, To = p.To,
             PublishedAtUtc = DateTime.UtcNow, Components = p.Components.Select(c => new ModelComponent { ComponentId = c.ComponentId, Layer = c.Layer, Order = c.Order }).ToList() };
-        db.ModelVersions.Add(entity); await db.SaveChangesAsync(); return entity;
+        if (persist) { db.ModelVersions.Add(entity); await db.SaveChangesAsync(); } return entity;
     }
 
     public async Task<Consent> PublishConsentAsync(PublishConsent p)
