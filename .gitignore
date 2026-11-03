@@ -1,0 +1,8 @@
+**/bin/
+**/obj/
+**/data/
+.vs/
+.vercel/
+test-results/
+.env*
+*.db*
