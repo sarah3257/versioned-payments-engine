@@ -25,6 +25,7 @@ public class EngineDb(DbContextOptions<EngineDb> options) : DbContext(options)
 
     protected override void OnModelCreating(ModelBuilder b)
     {
+        b.Entity<Placement>().HasIndex(x=>x.CreationRequestKey).IsUnique().HasFilter("\"CreationRequestKey\" <> ''");
         b.Entity<RetroBatch>().HasKey(x => x.Token);
         b.Entity<MonthlyRevision>().HasIndex(x => x.RunId).IsUnique();
         b.Entity<MonthlyRevision>().HasIndex(x => new {x.PlacementId, x.Month});

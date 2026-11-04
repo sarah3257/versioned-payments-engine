@@ -14,6 +14,7 @@ Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(dbPath))!);
 builder.Services.AddDbContext<EngineDb>(o => o.UseSqlite($"Data Source={dbPath};Foreign Keys=True;Default Timeout=30"));
 builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.AddSingleton<WriterGate>();
+builder.Services.AddScoped<PlacementWorkflow>();
 builder.Services.AddScoped<PlacementService>(); builder.Services.AddScoped<ManagementService>(); builder.Services.AddScoped<PaymentService>(); builder.Services.AddScoped<RetroService>(); builder.Services.AddScoped<ImpactService>(); builder.Services.AddScoped<PublicationService>(); builder.Services.AddScoped<PlanBuilder>(); builder.Services.AddScoped<RunService>();
 builder.Services.AddSingleton<IComponentCalculator,MaintenanceCalculator>();
 builder.Services.AddSingleton<IComponentCalculator,HumanCalculator>();
@@ -75,6 +76,9 @@ app.MapGet("/api/institutions", async (EngineDb db) => await db.Institutions.AsN
 app.MapPost("/api/headers/{id:guid}/payment-status", (Guid id, ChangePaymentStatus r, PaymentService service) => service.ChangeAsync(id,r));
 app.MapGet("/api/headers", async (EngineDb db) => await db.TransactionHeaders.AsNoTracking().Include(x=>x.Details).OrderByDescending(x=>x.PaymentMonth).Take(1000).ToListAsync());
 app.MapGet("/api/placements", async (EngineDb db) => await db.Placements.AsNoTracking().ToListAsync());
+app.MapPost("/api/placements/create-and-calculate", (CreatePlacementRequest r, PlacementWorkflow service)=>service.CreateAsync(r));
+app.MapGet("/api/placements/search", (string? q, PlacementWorkflow service)=>service.SearchAsync(q));
+app.MapGet("/api/placements/{id}/transactions", (string id, PlacementWorkflow service)=>service.TransactionsAsync(id));
 app.MapPost("/api/impact/simulate", (ImpactRequest r, ImpactService service) => service.SimulateAsync(r));
 app.MapPost("/api/impact/consents", (ConsentBatch r, ImpactService service) => service.SaveConsentsAsync(r));
 app.MapPost("/api/impact/publish", (PublishImpactRequest r, ImpactService service) => service.SaveConsentsAsync(r.Consent, r.Draft));

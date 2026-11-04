@@ -2,6 +2,7 @@ namespace Payments.Api.Domain;
 
 public class Placement
 {
+    public string CreationRequestKey { get; set; } = "";
     public string Id { get; set; } = "";
     public int ModelId { get; set; }
     public int Institution { get; set; }
