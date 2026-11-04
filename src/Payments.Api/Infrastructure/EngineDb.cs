@@ -5,6 +5,8 @@ namespace Payments.Api.Infrastructure;
 
 public class EngineDb(DbContextOptions<EngineDb> options) : DbContext(options)
 {
+    public DbSet<MonthlyRevision> MonthlyRevisions => Set<MonthlyRevision>();
+    public DbSet<RetroBatch> RetroBatches => Set<RetroBatch>();
     public DbSet<Placement> Placements => Set<Placement>();
     public DbSet<ComponentVersion> ComponentVersions => Set<ComponentVersion>();
     public DbSet<ModelVersion> ModelVersions => Set<ModelVersion>();
@@ -18,6 +20,9 @@ public class EngineDb(DbContextOptions<EngineDb> options) : DbContext(options)
 
     protected override void OnModelCreating(ModelBuilder b)
     {
+        b.Entity<RetroBatch>().HasKey(x => x.Token);
+        b.Entity<MonthlyRevision>().HasIndex(x => x.RunId).IsUnique();
+        b.Entity<MonthlyRevision>().HasIndex(x => new {x.PlacementId, x.Month});
         b.Entity<ComponentVersion>().HasIndex(x => new { x.ComponentId, x.Version }).IsUnique();
         b.Entity<ModelVersion>().HasIndex(x => new { x.ModelId, x.Version }).IsUnique();
         b.Entity<ModelVersion>().HasMany(x => x.Components).WithOne().HasForeignKey(x => x.ModelVersionId).OnDelete(DeleteBehavior.Restrict);
@@ -44,11 +49,15 @@ public class EngineDb(DbContextOptions<EngineDb> options) : DbContext(options)
     {
         await db.Database.EnsureCreatedAsync();
         await db.Database.ExecuteSqlRawAsync("CREATE TABLE IF NOT EXISTS Placements (Id TEXT NOT NULL PRIMARY KEY, ModelId INTEGER NOT NULL, Institution INTEGER NOT NULL, InstitutionName TEXT NOT NULL, \"From\" TEXT NOT NULL, \"To\" TEXT NOT NULL, Ownership INTEGER NOT NULL, InstitutionType TEXT NOT NULL, SupportLevel INTEGER NOT NULL, Administration TEXT NOT NULL, Population TEXT NOT NULL)");
+        await db.Database.ExecuteSqlRawAsync("CREATE TABLE IF NOT EXISTS MonthlyRevisions (Id TEXT NOT NULL PRIMARY KEY, PlacementId TEXT NOT NULL, Month TEXT NOT NULL, RunId TEXT NOT NULL, PreviousId TEXT NULL, BatchToken TEXT NULL, CreatedAtUtc TEXT NOT NULL)");
+        await db.Database.ExecuteSqlRawAsync("CREATE TABLE IF NOT EXISTS RetroBatches (Token TEXT NOT NULL PRIMARY KEY, RequestJson TEXT NOT NULL, ResultJson TEXT NOT NULL, ModelId INTEGER NOT NULL, ModelVersion INTEGER NOT NULL, \"From\" TEXT NOT NULL, \"To\" TEXT NOT NULL, CreatedAtUtc TEXT NOT NULL)");
+        await db.Database.ExecuteSqlRawAsync("CREATE UNIQUE INDEX IF NOT EXISTS IX_MonthlyRevisions_RunId ON MonthlyRevisions (RunId)");
+        await db.Database.ExecuteSqlRawAsync("CREATE INDEX IF NOT EXISTS IX_MonthlyRevisions_PlacementId_Month ON MonthlyRevisions (PlacementId, Month)");
         await db.Database.ExecuteSqlRawAsync("PRAGMA journal_mode=WAL;");
         // Extra DB guard: even direct SQL cannot silently rewrite published history.
         string[] tables = ["ComponentVersions", "ComponentItem", "DecisionRow", "DecisionCondition",
             "ModelVersions", "ModelComponent", "Consents", "PriceVersions", "TaxRateVersions", "AgreementVersions",
-            "CalculationRuns", "TransactionHeaders", "TransactionDetails"];
+            "CalculationRuns", "TransactionHeaders", "TransactionDetails", "MonthlyRevisions", "RetroBatches"];
         foreach (var table in tables)
             foreach (var op in new[] { "UPDATE", "DELETE" })
             {

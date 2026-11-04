@@ -13,6 +13,8 @@ public class ImpactService(EngineDb db, PlanBuilder plans, CalculationEngine eng
             new Placement { Id="demo-a-1", ModelId=1, Institution=12380, InstitutionName="מסגרת א׳", From=new(2026,1,1), To=new(2027,12,31), Ownership=Ownership.Public },
             new Placement { Id="demo-a-2", ModelId=1, Institution=12380, InstitutionName="מסגרת א׳", From=new(2026,8,15), To=new(2027,6,20), Ownership=Ownership.Public, InstitutionType="הוסטל", SupportLevel=5 },
             new Placement { Id="demo-b-1", ModelId=1, Institution=3404, InstitutionName="מסגרת ב׳", From=new(2026,1,1), To=new(2027,12,31), Ownership=Ownership.Private },
+            new Placement { Id="demo-c-1", ModelId=1, Institution=5500, InstitutionName="מסגרת ג׳", From=new(2026,4,10), To=new(2027,12,31), Ownership=Ownership.Public },
+            new Placement { Id="demo-c-2", ModelId=1, Institution=5500, InstitutionName="מסגרת ג׳", From=new(2026,11,10), To=new(2027,5,20), Ownership=Ownership.Public, InstitutionType="הוסטל", SupportLevel=5 },
             new Placement { Id="demo-b-2", ModelId=1, Institution=3404, InstitutionName="מסגרת ב׳", From=new(2026,7,10), To=new(2027,3,15), Ownership=Ownership.Private, InstitutionType="הוסטל" });
         await db.SaveChangesAsync();
     }

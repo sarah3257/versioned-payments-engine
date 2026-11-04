@@ -22,7 +22,9 @@ public class PlanBuilder(EngineDb db)
         {
             var consent = consents.Where(c => c.EffectiveFrom <= request.EventDate).OrderByDescending(c => c.EffectiveFrom).FirstOrDefault();
             // Explicit POC policy: initial model version is baseline before first consent.
-            version = consent?.ModelVersion ?? models.OrderBy(m => m.Version).FirstOrDefault()?.Version;
+            var activations = await db.RetroBatches.AsNoTracking().Where(x => x.ModelId == request.ModelId).ToListAsync();
+            var active = activations.Where(x => x.From <= request.EventDate && request.EventDate <= x.To).OrderByDescending(x => x.ModelVersion).FirstOrDefault();
+            version = active?.ModelVersion ?? consent?.ModelVersion ?? models.OrderBy(m => m.Version).FirstOrDefault()?.Version;
         }
         if (draft != null) { if (!simulation || draft.ModelId != request.ModelId) throw new BusinessException("טיוטה מותרת בסימולציה בלבד"); models.Add(draft); }
         var model = models.SingleOrDefault(m => m.Version == version && m.From <= request.EventDate && request.EventDate <= m.To)

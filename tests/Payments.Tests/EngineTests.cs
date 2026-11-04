@@ -20,7 +20,7 @@ public sealed class TestApp : WebApplicationFactory<Program>
     {
         Directory.CreateDirectory(folder);
         builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(new Dictionary<string, string?>
-        { ["DatabasePath"] = Path.Combine(folder, "test.db"), ["Logging:LogLevel:Default"] = "Warning" }));
+        { ["DatabasePath"] = Path.Combine(folder, "test.db"), ["SeedRetroDemo"] = "false", ["Logging:LogLevel:Default"] = "Warning" }));
         builder.ConfigureServices(services =>
         {
             services.RemoveAll<DbContextOptions<EngineDb>>();
