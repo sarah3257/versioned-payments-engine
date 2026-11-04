@@ -5,10 +5,10 @@ using Payments.Api.Domain;
 using Payments.Api.Infrastructure;
 namespace Payments.Api.Services;
 
-public class RetroService(EngineDb db, PlanBuilder plans, CalculationEngine engine, PublicationService publications, WriterGate gate)
+public class RetroService(EngineDb db, PlanBuilder plans, CalculationEngine engine, PublicationService publications, WriterGate gate, PaymentService payments)
 {
-    public record Line(string PlacementId,int Institution,string InstitutionName,DateOnly Month,int? BeforeVersion,int? AfterVersion,decimal? Before,decimal? After,decimal? Difference,bool WasStored,string? Error);
-    record Work(Placement Placement,DateOnly Month,ExecutionPlan Plan,CalculationResult Before,CalculationResult After,MonthlyRevision? Previous);
+    public record Line(string PlacementId,int Institution,string InstitutionName,DateOnly Month,int? BeforeVersion,int? AfterVersion,decimal? Before,decimal? After,decimal? Difference,bool WasStored,string? Error,string PaymentStatus="Pending",string Treatment="ReplacePlanned");
+    record Work(Placement Placement,DateOnly Month,ExecutionPlan Plan,CalculationResult Before,CalculationResult After,MonthlyRevision? Previous,TransactionHeader? Source);
     record Preview(List<Line> Rows,List<Work> Work,string? Token);
     static string Hash(string text)=>Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text)));
     static CalculateRequest Request(Placement p,DateOnly month)
@@ -16,6 +16,11 @@ public class RetroService(EngineDb db, PlanBuilder plans, CalculationEngine engi
         var end=month.AddMonths(1).AddDays(-1); var start=p.From>month?p.From:month; var finish=p.To<end?p.To:end;
         var fraction=(decimal)(finish.DayNumber-start.DayNumber+1)/DateTime.DaysInMonth(month.Year,month.Month);
         return new("retro-preview",p.ModelId,p.Institution,p.Id,start,p.Ownership,p.InstitutionType,p.SupportLevel,p.Administration,p.Population,fraction);
+    }
+        static DateOnly PeriodEnd(Placement p,PublishModel draft,Institution? institution)
+    {
+        var yearEnd=draft.EndCommitment ?? BusinessQueries.BusinessEnd(institution??new Institution(),draft.From);
+        return new[]{draft.To,p.To,yearEnd}.Min();
     }
     static IEnumerable<DateOnly> Months(Placement p,DateOnly from,DateOnly to)
     {
@@ -49,28 +54,33 @@ public class RetroService(EngineDb db, PlanBuilder plans, CalculationEngine engi
         if(draft.From.Day!=1||draft.To.Day!=DateTime.DaysInMonth(draft.To.Year,draft.To.Month)||draft.To.DayNumber-draft.From.DayNumber>366*5)
             throw new BusinessException("יש לבחור תחולה מתחילת חודש עד סוף חודש, עד חמש שנים");
         var candidate=await publications.PublishModelAsync(draft,false);
-        var placements=await db.Placements.AsNoTracking().Where(x=>x.ModelId==draft.ModelId).OrderBy(x=>x.Id).ToListAsync();
+        if(draft.Institutions is {Count:0})throw new BusinessException("יש לבחור מסגרת אחת לפחות");
+        var institutions=await db.Institutions.AsNoTracking().ToDictionaryAsync(x=>x.Id);
+        if(draft.Institutions!=null && draft.Institutions.Any(x=>!institutions.ContainsKey(x)))throw new BusinessException("מסגרת לא קיימת");
+        var placements=await db.Placements.AsNoTracking().Where(x=>x.ModelId==draft.ModelId && (draft.Institutions==null || draft.Institutions.Contains(x.Institution))).OrderBy(x=>x.Id).ToListAsync();
         if(placements.Count==0)throw new BusinessException("אין השמות למודל שנבחר");
         var revisions=await db.MonthlyRevisions.AsNoTracking().ToListAsync();
         var runs=await db.CalculationRuns.AsNoTracking().ToDictionaryAsync(x=>x.Id);
+        var headers=await db.TransactionHeaders.ToDictionaryAsync(x=>x.Id);
         var rows=new List<Line>();var work=new List<Work>();
         foreach(var p in placements)
-        foreach(var month in Months(p,draft.From,draft.To))
+        foreach(var month in Months(p,draft.From,PeriodEnd(p,draft, institutions.GetValueOrDefault(p.Institution))))
         {
             var request=Request(p,month);
             var previous=revisions.Where(x=>x.PlacementId==p.Id&&x.Month==month).OrderByDescending(x=>x.CreatedAtUtc).ThenByDescending(x=>x.Id).FirstOrDefault();
             try
             {
+                var source=previous!=null?headers.Values.Single(x=>x.CalculationRunId==previous.RunId && x.EntryType!="Reversal"):null;
                 var before=previous!=null?JsonDefaults.Read<CalculationResult>(runs[previous.RunId].ResultJson):engine.Execute(await plans.BuildAsync(request,true),true);
                 var plan=await plans.BuildAsync(request with {SimulationModelVersion=draft.Version},true,candidate);
                 var after=engine.Execute(plan,false);
-                rows.Add(new(p.Id,p.Institution,p.InstitutionName,month,before.Header.ModelVersion,after.Header.ModelVersion,before.Header.Total,after.Header.Total,after.Header.Total-before.Header.Total,previous!=null,null));
-                work.Add(new(p,month,plan,before,after,previous));
+                rows.Add(new(p.Id,p.Institution,p.InstitutionName,month,before.Header.ModelVersion,after.Header.ModelVersion,before.Header.Total,after.Header.Total,after.Header.Total-before.Header.Total,previous!=null,null,source?.PaymentStatus??"Pending",source?.PaymentStatus=="Paid"?"ReversePaidAndRecalculate":"ReplacePlanned"));
+                work.Add(new(p,month,plan,before,after,previous,source));
             }
             catch(BusinessException e){rows.Add(new(p.Id,p.Institution,p.InstitutionName,month,null,null,null,null,null,previous!=null,e.Message));}
         }
         // Include full deterministic inputs, selection and previous revision, not random execution IDs.
-        var fingerprint=new {draft,placements,items=work.Select(w=>new {w.Month,w.Placement.Id,Previous=w.Previous?.Id,Before=w.Before.Header.Total,Plan=w.Plan with {SelectedAtUtc=DateTime.MinValue}})};
+        var fingerprint=new {draft,placements,items=work.Select(w=>new {w.Month,w.Placement.Id,Previous=w.Previous?.Id,Before=w.Before.Header.Total,PaymentStatus=w.Source?.PaymentStatus,Plan=w.Plan with {SelectedAtUtc=DateTime.MinValue}})};
         string? token=rows.Count>0&&rows.All(x=>x.Error==null)?Hash(JsonDefaults.Write(fingerprint)):null;
         return new(rows,work,token);
     }
@@ -94,10 +104,42 @@ public class RetroService(EngineDb db, PlanBuilder plans, CalculationEngine engi
             var preview=await BuildAsync(request.Draft);
             if(preview.Token==null||preview.Token!=request.PreviewToken)throw new BusinessException("הנתונים השתנו או שיש שגיאות. הריצו סימולציה מחדש",409);
             await using var transaction=await db.Database.BeginTransactionAsync();
+            foreach(var item in preview.Work.Where(x=>x.Source!=null))
+                if(await db.TransactionHeaders.AsNoTracking().Where(x=>x.Id==item.Source!.Id).Select(x=>x.PaymentStatus).SingleAsync()!=item.Source!.PaymentStatus)throw new BusinessException("סטטוס תשלום השתנה; יש לבצע סימולציה מחדש",409);
+                        foreach(var item in preview.Work)
+            {
+                var latest=await db.MonthlyRevisions.AsNoTracking().Where(x=>x.PlacementId==item.Placement.Id&&x.Month==item.Month).OrderByDescending(x=>x.CreatedAtUtc).ThenByDescending(x=>x.Id).Select(x=>(Guid?)x.Id).FirstOrDefaultAsync();
+                if(latest!=item.Previous?.Id)throw new BusinessException("תוצאה חודשית השתנתה במקביל; יש להריץ סימולציה מחדש",409);
+            }
             await publications.PublishModelAsync(request.Draft);
-            foreach(var w in preview.Work)Store(w.Plan,w.After,w.Previous,request.PreviewToken);
-            var response=new {executed=true,modelVersion=request.Draft.Version,updatedMonths=preview.Work.Count,net=preview.Rows.Sum(x=>x.Difference??0),token=request.PreviewToken,note="נשמרו טרנזקציות חדשות ורצף החלפות. התוצאות המקוריות נשמרו להיסטוריה. אין קיזוז או העברת כסף."};
-            db.RetroBatches.Add(new RetroBatch {Token=request.PreviewToken,RequestJson=JsonDefaults.Write(request.Draft),ResultJson=JsonDefaults.Write(response),ModelId=request.Draft.ModelId,ModelVersion=request.Draft.Version,From=request.Draft.From,To=request.Draft.To,CreatedAtUtc=DateTime.UtcNow});
+                        int reversed=0;
+            foreach(var w in preview.Work)
+            {
+                w.After.Header.ReplacedHeaderId=w.Source?.Id;
+                Store(w.Plan,w.After,w.Previous,request.PreviewToken);
+                if(w.Source!=null)
+                {
+                    if(w.Source.PaymentStatus=="Paid")
+                    {
+                        var reverse=JsonDefaults.Read<TransactionHeader>(JsonDefaults.Write(w.Before.Header));
+                        reverse.Id=Guid.NewGuid();reverse.CalculationRunId=w.After.RunId;reverse.Total=-w.Before.Header.Total;
+                        reverse.EntryType="Reversal";reverse.ReversesHeaderId=w.Source.Id;reverse.ReplacedHeaderId=null;
+                        reverse.PaymentStatus="Pending";reverse.PaidAtUtc=null;reverse.Status="Pending";
+                        foreach(var d in reverse.Details){d.TransactionHeaderId=reverse.Id;d.Amount=-d.Amount;d.Explanation="ביטול תשלום מקור "+w.Source.Id+": "+d.Explanation;}
+                        db.TransactionHeaders.Add(reverse);reversed++;
+                    }
+                    else payments.Supersede(w.Source,w.After.Header.Id);
+                }
+            }
+            if(request.Draft.Institutions!=null)
+            foreach(int institution in request.Draft.Institutions.Distinct())
+            {
+                var existing=await db.Consents.SingleOrDefaultAsync(x=>x.Institution==institution && x.ModelId==request.Draft.ModelId && x.EffectiveFrom==request.Draft.From && x.ModelVersion==request.Draft.Version);
+                
+                if(existing==null)db.Consents.Add(new Consent{Institution=institution,ModelId=request.Draft.ModelId,ModelVersion=request.Draft.Version,EffectiveFrom=request.Draft.From,RecordedAtUtc=DateTime.UtcNow});
+            }
+            var response=new {executed=true,modelVersion=request.Draft.Version,updatedMonths=preview.Work.Count,reversalHeaders=reversed,net=preview.Rows.Sum(x=>x.Difference??0),token=request.PreviewToken,note="עודכנו התוצאות המתוכננות; לתוצאות ששולמו נוצרו מינוס מקור וחישוב חדש. המקור נשמר להיסטוריה. לא הועבר כסף לבנק."};
+            db.RetroBatches.Add(new RetroBatch {Token=request.PreviewToken,InstitutionsJson=request.Draft.Institutions==null?"":JsonDefaults.Write(request.Draft.Institutions),RequestJson=JsonDefaults.Write(request.Draft),ResultJson=JsonDefaults.Write(response),ModelId=request.Draft.ModelId,ModelVersion=request.Draft.Version,From=request.Draft.From,To=request.Draft.To,CreatedAtUtc=DateTime.UtcNow});
             await db.SaveChangesAsync();
             if(failBeforeCommit)throw new BusinessException("כשל בדיקה לפני שמירה סופית");
             await transaction.CommitAsync();return response;
@@ -106,13 +148,15 @@ public class RetroService(EngineDb db, PlanBuilder plans, CalculationEngine engi
     }
     public async Task<object> CurrentAsync()
     {
+        var headers=await db.TransactionHeaders.AsNoTracking().ToDictionaryAsync(x=>x.Id);
         var revisions=await db.MonthlyRevisions.AsNoTracking().ToListAsync();
         var runs=await db.CalculationRuns.AsNoTracking().ToDictionaryAsync(x=>x.Id);
         return revisions.GroupBy(x=>new{x.PlacementId,x.Month}).Select(g=>
         {
             var current=g.OrderByDescending(x=>x.CreatedAtUtc).ThenByDescending(x=>x.Id).First();
             var result=JsonDefaults.Read<CalculationResult>(runs[current.RunId].ResultJson);
-            return new {current.PlacementId,current.Month,current.RunId,modelVersion=result.Header.ModelVersion,total=result.Header.Total,revisions=g.Count(),current.PreviousId};
+            var header=headers.Values.Single(x=>x.CalculationRunId==current.RunId && x.EntryType!="Reversal");
+            return new {current.PlacementId,current.Month,current.RunId,headerId=header.Id,paymentStatus=header.PaymentStatus,modelVersion=result.Header.ModelVersion,total=result.Header.Total,revisions=g.Count(),current.PreviousId};
         }).OrderBy(x=>x.PlacementId).ThenBy(x=>x.Month).ToList();
     }
 }

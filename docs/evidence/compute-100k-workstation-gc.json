@@ -1,0 +1,32 @@
+{
+  "timestamp": "2026-11-04T07:52:11.4888683Z",
+  "cpu": 8,
+  "reports": [
+    {
+      "placements": 100000,
+      "months": 12,
+      "calculations": 1200000,
+      "components": 40,
+      "decisionRows": 200,
+      "parallelism": 1,
+      "seconds": 248.6569002,
+      "calculationsPerSecond": 4825.926805308096,
+      "p95ComputeMs": 0.3466,
+      "errors": 0,
+      "scope": "in-memory only; full trace; excludes HTTP and DB; synthetic repeated template"
+    },
+    {
+      "placements": 100000,
+      "months": 12,
+      "calculations": 1200000,
+      "components": 40,
+      "decisionRows": 200,
+      "parallelism": 4,
+      "seconds": 313.1995178,
+      "calculationsPerSecond": 3831.423523347455,
+      "p95ComputeMs": 0.9862,
+      "errors": 0,
+      "scope": "in-memory only; full trace; excludes HTTP and DB; synthetic repeated template"
+    }
+  ]
+}

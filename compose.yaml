@@ -1,0 +1,14 @@
+services:
+  engine:
+    build:
+      context: .
+      dockerfile: Dockerfile.vercel
+    ports:
+      - "127.0.0.1:5088:80"
+    environment:
+      DatabasePath: /data/payments.db
+      ASPNETCORE_URLS: http://0.0.0.0:80
+    volumes:
+      - payments-data:/data
+volumes:
+  payments-data:

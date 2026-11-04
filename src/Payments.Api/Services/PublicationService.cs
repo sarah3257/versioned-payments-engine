@@ -6,7 +6,7 @@ namespace Payments.Api.Services;
 
 public class PublicationService(EngineDb db)
 {
-    public static readonly string[] Attributes = ["institutionType", "supportLevel", "institution", "ownership", "administration", "population"];
+    public static readonly string[] Attributes = ["institutionType", "supportLevel", "institution", "ownership", "administration", "population", "age", "gender"];
     public static readonly string[] Operators = ["=", "!=", "<", ">", "<=", ">=", "BETWEEN"];
     static void Require([System.Diagnostics.CodeAnalysis.DoesNotReturnIf(false)] bool test, string message) { if (!test) throw new BusinessException(message); }
     static void Dates(DateOnly from, DateOnly to) => Require(from != default && from <= to, "טווח תאריכים אינו תקין");
@@ -40,20 +40,25 @@ public class PublicationService(EngineDb db)
                 if (c.Value != null && c.Operator != "=" && c.Operator != "!=")
                 {
                     Require(decimal.TryParse(c.Value, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out _), "השוואת סדר דורשת ערך מספרי");
-                    Require(c.Attribute is "supportLevel" or "institution", "השוואת סדר נתמכת במאפיינים מספריים בלבד");
+                    Require(c.Attribute is "supportLevel" or "institution" or "age" or "gender", "השוואת סדר נתמכת במאפיינים מספריים בלבד");
                     if (c.Operator == "BETWEEN")
                         Require(decimal.TryParse(c.ValueTo, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var upper) && decimal.Parse(c.Value, System.Globalization.CultureInfo.InvariantCulture) <= upper, "טווח תנאי לא תקין");
                 }
             }
         }
-        // Verify structural references now; effective price coverage is checked at execution.
+                // A component cannot be published with a missing price period.
+        var priceCatalog=await db.PricesAsync();
+        foreach(var item in p.Items)
+            Require(Covers(priceCatalog.Where(x=>x.PriceKey==item.PriceKey&&x.Kind==p.Kind).Select(x=>(x.From,x.To)),p.From,p.To),$"אין כיסוי מחירון לכל תקופת הרכיב עבור {item.PriceKey}");
+        foreach(var row in p.Rows.Where(x=>x.ResultAmount==0))
+            Require(Covers(priceCatalog.Where(x=>x.PriceKey==row.PriceKey&&x.Kind==ComponentKind.Maintenance).Select(x=>(x.From,x.To)),p.From,p.To),$"אין כיסוי מחירון לשורת החלטה {row.RowKey}");
         foreach (var item in p.Items)
-            Require(await db.PriceVersions.AnyAsync(x => x.PriceKey == item.PriceKey && x.Kind == p.Kind), $"פריט מחירון לא מוכר לסוג הרכיב: {item.PriceKey}");
+            Require((await db.PricesAsync()).Any(x => x.PriceKey == item.PriceKey && x.Kind == p.Kind), $"פריט מחירון לא מוכר לסוג הרכיב: {item.PriceKey}");
         foreach (var row in p.Rows.Where(r => r.ResultAmount == 0))
-            Require(await db.PriceVersions.AnyAsync(x => x.PriceKey == row.PriceKey), $"פריט מחירון סל לא מוכר: {row.PriceKey}");
+            Require((await db.PricesAsync()).Any(x => x.PriceKey == row.PriceKey), $"פריט מחירון סל לא מוכר: {row.PriceKey}");
         var entity = new ComponentVersion
         {
-            ComponentId = p.ComponentId, Version = p.Version, Name = p.Name, Kind = p.Kind,
+            ComponentId = p.ComponentId, Version = p.Version, Name = p.Name, Kind = p.Kind, SourceReference=p.SourceReference,PublishedBy=p.PublishedBy,
             From = p.From, To = p.To, TemplateVersion = p.TemplateVersion,
             SupportLevel = p.SupportLevel, InstitutionType = p.InstitutionType,
             Administration = p.Administration, Population = p.Population,
@@ -64,6 +69,9 @@ public class PublicationService(EngineDb db)
                 ResultAmount = r.ResultAmount, PriceKey = r.PriceKey, TaxLiability = r.TaxLiability,
                 Conditions = r.Conditions.Select(c => new DecisionCondition { Attribute = c.Attribute, Operator = c.Operator, Value = c.Value, ValueTo = c.ValueTo }).ToList() }).ToList()
         };
+        entity.MaintenanceItems = p.Kind == ComponentKind.Maintenance ? p.Items.Select(i=>new MaintenanceSpecification {PriceKey=i.PriceKey,PaymentPercent=i.Factor*100,IsProfitRequired=i.ProfitRequired,TaxCalcId=i.TaxLiability}).ToList() : [];
+        entity.HumanItems = p.Kind == ComponentKind.Staff ? p.Items.Select(i=>new HumanSpecification {PriceKey=i.PriceKey,TotalCountPosition=i.Factor,IsProfitRequired=i.ProfitRequired,TaxCalcId=i.TaxLiability}).ToList() : [];
+        db.AuditEvents.Add(new AuditEvent{Action="PublishComponent",Subject=$"{p.ComponentId}/{p.Version}",Payload=JsonDefaults.Write(p)});
         db.ComponentVersions.Add(entity);
         await db.SaveChangesAsync();
         return entity;
@@ -88,9 +96,9 @@ public class PublicationService(EngineDb db)
             Require(kind is ComponentKind.Profit or ComponentKind.Tax || link.Layer <= 5, "רכיב בסיס חייב להקדים רווח ומס");
             Require(Covers(versions.Select(v => (v.From, v.To)), p.From, p.To), $"אין כיסוי תוקף מלא לרכיב {link.ComponentId}");
         }
-        var entity = new ModelVersion { ModelId = p.ModelId, Version = p.Version, Name = p.Name, From = p.From, To = p.To,
+        var entity = new ModelVersion { ModelId = p.ModelId, Version = p.Version, Name = p.Name, From = p.From, To = p.To, EndCommitment=p.EndCommitment,SourceReference=p.SourceReference,PublishedBy=p.PublishedBy,
             PublishedAtUtc = DateTime.UtcNow, Components = p.Components.Select(c => new ModelComponent { ComponentId = c.ComponentId, Layer = c.Layer, Order = c.Order }).ToList() };
-        if (persist) { db.ModelVersions.Add(entity); await db.SaveChangesAsync(); } return entity;
+        if (persist) { db.AuditEvents.Add(new AuditEvent{Action="PublishModel",Subject=$"{p.ModelId}/{p.Version}",Payload=JsonDefaults.Write(p)}); db.ModelVersions.Add(entity); await db.SaveChangesAsync(); } return entity;
     }
 
     public async Task<Consent> PublishConsentAsync(PublishConsent p)
@@ -104,10 +112,12 @@ public class PublicationService(EngineDb db)
     {
         Dates(p.From, p.To);
         Require(!string.IsNullOrWhiteSpace(p.PriceKey) && p.Version > 0 && p.Amount >= 0 && p.Kind is ComponentKind.Maintenance or ComponentKind.Staff, "מחירון לא תקין");
-        var previous = await db.PriceVersions.Where(x => x.PriceKey == p.PriceKey).ToListAsync();
+        Require(p.UnitMeasureId is 1 or 2 && p.HourAmount >= 0, "יחידת מידה או מחיר שעה לא תקינים");
+        var previous = (await db.PricesAsync()).Where(x=>x.PriceKey==p.PriceKey && x.Kind==p.Kind).ToList();
         Require(previous.All(x => x.Version < p.Version && x.Kind == p.Kind), "גרסת מחירון חייבת להיות גבוהה ולשמור על סוג הפריט");
         var e = new PriceVersion { PriceKey = p.PriceKey, Version = p.Version, Description = p.Description, Kind = p.Kind, From = p.From, To = p.To, Amount = p.Amount };
-        db.PriceVersions.Add(e); await db.SaveChangesAsync(); return e;
+        if(p.Kind==ComponentKind.Maintenance)db.MaintenancePrices.Add(new MaintenancePrice {PriceKey=p.PriceKey,Version=p.Version,ItemName=p.Description,From=p.From,To=p.To,Amount=p.Amount,UnitMeasureId=p.UnitMeasureId});
+        else db.HumanPrices.Add(new HumanPrice {PriceKey=p.PriceKey,Version=p.Version,JobTypeName=p.Description,From=p.From,To=p.To,MonthlyAmount=p.Amount,HourAmount=p.HourAmount}); await db.SaveChangesAsync(); return e;
     }
     public async Task<AgreementVersion> PublishAgreementAsync(PublishAgreement p)
     {
@@ -124,6 +134,20 @@ public class PublicationService(EngineDb db)
         Require(all.All(x => x.Version < p.Version), "גרסת מס חייבת להיות גבוהה");
         var e = new TaxRateVersion { Ownership = p.Ownership, SourceKind = p.SourceKind, Version = p.Version, TaxName = p.TaxName, From = p.From, To = p.To, Percent = p.Percent };
         db.TaxRateVersions.Add(e); await db.SaveChangesAsync(); return e;
+    }
+        public async Task<object> PublishPackageAsync(PublicationPackage package)
+    {
+        if(package.Model==null||package.Components==null||package.Prices==null)throw new BusinessException("חסרים model, components או prices");
+        await using var tx=await db.Database.BeginTransactionAsync();
+        foreach(var price in package.Prices)await PublishPriceAsync(price);
+        foreach(var c in package.Components)
+        {
+            int version=c.Version==0?(await db.ComponentVersions.Where(x=>x.ComponentId==c.ComponentId).Select(x=>(int?)x.Version).MaxAsync()??0)+1:c.Version;
+            await PublishComponentAsync(c with {Version=version});
+        }
+        int next=package.Model.Version==0?(await db.ModelVersions.Where(x=>x.ModelId==package.Model.ModelId).Select(x=>(int?)x.Version).MaxAsync()??0)+1:package.Model.Version;
+        var model=await PublishModelAsync(package.Model with {Version=next});await tx.CommitAsync();
+        return new {modelId=model.Id,modelLogicId=model.ModelId,versionNumber=model.Version,status="Published"};
     }
     public static bool Covers(IEnumerable<(DateOnly From, DateOnly To)> periods, DateOnly from, DateOnly to)
     {

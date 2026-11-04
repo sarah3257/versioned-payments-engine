@@ -14,7 +14,7 @@ public class CalculationContext(ExecutionPlan plan, TransactionHeader header, Li
     public ExecutionPlan Plan { get; } = plan;
     public TransactionHeader Header { get; } = header;
     public List<TraceEntry> Trace { get; } = trace;
-    public PriceVersion Price(string key) => Plan.Prices.SingleOrDefault(p => p.PriceKey == key)
+    public PriceVersion Price(string key, ComponentKind kind=ComponentKind.Maintenance) => Plan.Prices.SingleOrDefault(p => p.PriceKey == key && p.Kind==kind)
         ?? throw new BusinessException($"מחיר בתוקף לא נמצא: {key}");
     public void Add(SelectedComponent s, string itemKey, string description, decimal amount, bool profit, TaxLiability tax, string explanation)
     {
@@ -34,8 +34,9 @@ public class ItemCalculator(ComponentKind kind) : IComponentCalculator
     {
         foreach (var item in s.Definition.Items.OrderBy(i => i.PriceKey, StringComparer.Ordinal))
         {
-            var price = c.Price(item.PriceKey);
+            var price = c.Price(item.PriceKey,Kind);
             if (price.Kind != Kind) throw new BusinessException("סוג המחירון אינו מתאים לרכיב");
+            if(price.UnitMeasureId!=1)throw new BusinessException("ה־POC תומך בחישוב פריט חודשי בלבד; יחידת המידה אינה חודשית");
             var amount = price.Amount * item.Factor * c.Plan.Request.MonthlyFactor;
             c.Add(s, item.PriceKey, price.Description, amount, item.ProfitRequired, item.TaxLiability,
                 $"מחיר {price.Amount} (שורת מחירון {price.Id}, גרסה {price.Version}) × מקדם {item.Factor} × חלק חודש {c.Plan.Request.MonthlyFactor}");
@@ -68,6 +69,8 @@ public class BasketCalculator : IComponentCalculator
         {
             "institutionType" => request.InstitutionType, "supportLevel" => request.SupportLevel.ToString(CultureInfo.InvariantCulture),
             "institution" => request.Institution.ToString(CultureInfo.InvariantCulture), "ownership" => request.Ownership.ToString(),
+            "age" => request.BirthDate is {} birth ? (request.EventDate.Year-birth.Year-(birth.AddYears(request.EventDate.Year-birth.Year)>request.EventDate?1:0)).ToString(CultureInfo.InvariantCulture) : throw new BusinessException("חסר תאריך לידה לחישוב גיל"),
+            "gender" => request.GenderId?.ToString(CultureInfo.InvariantCulture) ?? throw new BusinessException("חסר מגדר"),
             "administration" => request.Administration, "population" => request.Population,
             _ => throw new BusinessException("מאפיין החלטה לא נתמך")
         };
@@ -128,7 +131,8 @@ public class CalculationEngine(IEnumerable<IComponentCalculator> calculators)
         {
             if (selected.Definition.TemplateVersion != "v1") throw new BusinessException("גרסת תבנית ישנה אינה זמינה במנוע הנוכחי");
             trace.Add(new(selected.Definition.ComponentId, selected.Definition.Version, selected.Layer, selected.SelectionReason));
-            calculators.Single(c => c.Kind == selected.Definition.Kind).Calculate(selected, context);
+            try { calculators.Single(c => c.Kind == selected.Definition.Kind).Calculate(selected, context); }
+            catch(BusinessException e) { throw new BusinessException($"רכיב {selected.Definition.ComponentId} ({selected.Definition.Name}), שכבה {selected.Layer}: {e.Message}",e.Status){ErrorCode="COMPONENT_FAILED",ComponentId=selected.Definition.ComponentId,Layer=selected.Layer}; }
         }
         header.Total = header.Details.Sum(d => d.Amount);
         return new(id, header, trace, simulation);

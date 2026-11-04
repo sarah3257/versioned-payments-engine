@@ -1,0 +1,78 @@
+{
+  "timestamp": "2026-11-04T07:42:48.010Z",
+  "scope": "local HTTP + SQLite, single process; 5 component business seed; independent request IDs",
+  "reports": [
+    {
+      "endpoint": "simulations",
+      "count": 100,
+      "parallelism": 1,
+      "seconds": 0.8448169,
+      "requestsPerSecond": 118.36884418386991,
+      "p95Ms": 10.781799999999976,
+      "errors": 0,
+      "statuses": {
+        "200": 100
+      }
+    },
+    {
+      "endpoint": "simulations",
+      "count": 100,
+      "parallelism": 8,
+      "seconds": 0.1552208999999999,
+      "requestsPerSecond": 644.2431399379856,
+      "p95Ms": 42.351099999999974,
+      "errors": 0,
+      "statuses": {
+        "200": 100
+      }
+    },
+    {
+      "endpoint": "simulations",
+      "count": 100,
+      "parallelism": 32,
+      "seconds": 0.12287559999999985,
+      "requestsPerSecond": 813.8312244253548,
+      "p95Ms": 57.23070000000007,
+      "errors": 0,
+      "statuses": {
+        "200": 100
+      }
+    },
+    {
+      "endpoint": "calculations",
+      "count": 100,
+      "parallelism": 1,
+      "seconds": 0.949316,
+      "requestsPerSecond": 105.33900197615966,
+      "p95Ms": 14.477100000000064,
+      "errors": 0,
+      "statuses": {
+        "200": 100
+      }
+    },
+    {
+      "endpoint": "calculations",
+      "count": 100,
+      "parallelism": 8,
+      "seconds": 0.7572651,
+      "requestsPerSecond": 132.05415118166675,
+      "p95Ms": 72.76230000000032,
+      "errors": 0,
+      "statuses": {
+        "200": 100
+      }
+    },
+    {
+      "endpoint": "calculations",
+      "count": 100,
+      "parallelism": 32,
+      "seconds": 0.8221733000000003,
+      "requestsPerSecond": 121.62885853870462,
+      "p95Ms": 293.8325,
+      "errors": 0,
+      "statuses": {
+        "200": 100
+      }
+    }
+  ]
+}

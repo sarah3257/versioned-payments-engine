@@ -14,9 +14,9 @@ Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(dbPath))!);
 builder.Services.AddDbContext<EngineDb>(o => o.UseSqlite($"Data Source={dbPath};Foreign Keys=True;Default Timeout=30"));
 builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.AddSingleton<WriterGate>();
-builder.Services.AddScoped<RetroService>(); builder.Services.AddScoped<ImpactService>(); builder.Services.AddScoped<PublicationService>(); builder.Services.AddScoped<PlanBuilder>(); builder.Services.AddScoped<RunService>();
-builder.Services.AddSingleton<IComponentCalculator>(new ItemCalculator(ComponentKind.Maintenance));
-builder.Services.AddSingleton<IComponentCalculator>(new ItemCalculator(ComponentKind.Staff));
+builder.Services.AddScoped<PlacementService>(); builder.Services.AddScoped<ManagementService>(); builder.Services.AddScoped<PaymentService>(); builder.Services.AddScoped<RetroService>(); builder.Services.AddScoped<ImpactService>(); builder.Services.AddScoped<PublicationService>(); builder.Services.AddScoped<PlanBuilder>(); builder.Services.AddScoped<RunService>();
+builder.Services.AddSingleton<IComponentCalculator,MaintenanceCalculator>();
+builder.Services.AddSingleton<IComponentCalculator,HumanCalculator>();
 builder.Services.AddSingleton<IComponentCalculator, BasketCalculator>();
 builder.Services.AddSingleton<IComponentCalculator, ProfitCalculator>();
 builder.Services.AddSingleton<IComponentCalculator, TaxCalculator>();
@@ -25,7 +25,8 @@ var app = builder.Build();
 app.Use(async (context, next) =>
 {
     try { await next(); }
-    catch (BusinessException e) { context.Response.StatusCode = e.Status; await context.Response.WriteAsJsonAsync(new { error = e.Message }); }
+    catch (BusinessException e) { context.Response.StatusCode = e.Status; await context.Response.WriteAsJsonAsync(new { error = e.Message, errorCode=e.ErrorCode, componentId=e.ComponentId, layer=e.Layer }); }
+    catch (DbUpdateConcurrencyException) { context.Response.StatusCode=409; await context.Response.WriteAsJsonAsync(new {error="הנתונים השתנו במקביל; יש לרענן ולנסות שוב"}); }
     catch (DbUpdateException) { context.Response.StatusCode = 409; await context.Response.WriteAsJsonAsync(new { error = "התנגשות נתונים: מזהה/גרסה קיימים או פעולה אסורה על היסטוריה" }); }
     catch (BadHttpRequestException e) { context.Response.StatusCode = 400; await context.Response.WriteAsJsonAsync(new { error = e.Message }); }
     catch (Exception e) { app.Logger.LogError(e, "Request failed"); context.Response.StatusCode = 500; await context.Response.WriteAsJsonAsync(new { error = "שגיאת שרת. הבקשה לא הושלמה; יש לבדוק את יומן השרת" }); }
@@ -35,8 +36,8 @@ app.MapGet("/api/health", () => new { status = "ok", engine = "engine-v1", datab
 app.MapGet("/api/catalog", async (EngineDb db) => new
 {
     models = await db.ModelVersions.AsNoTracking().Include(x => x.Components).ToListAsync(),
-    components = await db.ComponentVersions.AsNoTracking().Include(x => x.Items).Include(x => x.Rows).ThenInclude(x => x.Conditions).AsSplitQuery().ToListAsync(),
-    prices = await db.PriceVersions.AsNoTracking().ToListAsync(), consents = await db.Consents.AsNoTracking().ToListAsync(),
+    components = await db.ComponentsAsync(),
+    prices = await db.PricesAsync(), consents = await db.Consents.AsNoTracking().ToListAsync(),
     taxRates = await db.TaxRateVersions.AsNoTracking().ToListAsync(), agreements = await db.AgreementVersions.AsNoTracking().ToListAsync()
 });
 app.MapGet("/api/runs", async (EngineDb db) => await db.CalculationRuns.AsNoTracking().OrderByDescending(r => r.CompletedAtUtc)
@@ -55,6 +56,7 @@ app.MapPost("/api/runs/{id:guid}/replay", (Guid id, RunService service) => servi
 app.MapPost("/api/calculations", (CalculateRequest request, RunService service) => service.CalculateAsync(request));
 app.MapPost("/api/simulations", (CalculateRequest request, RunService service) => service.CalculateAsync(request, simulation: true));
 app.MapPost("/api/components/publish", async (PublishComponent p, PublicationService service, WriterGate gate) => await Write(() => service.PublishComponentAsync(p), gate));
+app.MapPost("/api/publications", async (PublicationPackage r, PublicationService service,WriterGate gate)=>await Write(()=>service.PublishPackageAsync(r),gate));
 app.MapPost("/api/models/publish", async (PublishModel p, PublicationService service, WriterGate gate) => await Write(() => service.PublishModelAsync(p), gate));
 app.MapPost("/api/consents", async (PublishConsent p, PublicationService service, WriterGate gate) => await Write(() => service.PublishConsentAsync(p), gate));
 app.MapPost("/api/prices/publish", async (PublishPrice p, PublicationService service, WriterGate gate) => await Write(() => service.PublishPriceAsync(p), gate));
@@ -63,6 +65,15 @@ app.MapPost("/api/tax-rates/publish", async (PublishTax p, PublicationService se
 app.MapPost("/api/model-publication/simulate", (PublishModel r, RetroService service) => service.SimulateAsync(r));
 app.MapPost("/api/model-publication/execute", (RetroExecution r, RetroService service) => service.ExecuteAsync(r));
 app.MapGet("/api/model-publication/current", (RetroService service) => service.CurrentAsync());
+app.MapPost("/api/versions/state", (VersionCommand r,ManagementService service)=>service.ChangeVersionAsync(r));
+app.MapGet("/api/components/{id:int}/where-used", (int id,ManagementService service)=>service.WhereUsedAsync(id));
+app.MapPost("/api/forecasts", (ForecastRequest r,ManagementService service)=>service.ForecastAsync(r));
+app.MapGet("/api/export", async (EngineDb db)=>new {models=await db.ModelVersions.AsNoTracking().Include(x=>x.Components).ToListAsync(),components=await db.ComponentsAsync(),prices=await db.PricesAsync(),consents=await db.Consents.AsNoTracking().ToListAsync(),audit=await db.AuditEvents.AsNoTracking().ToListAsync()});
+app.MapPost("/api/institutions", (Institution r,PlacementService service)=>service.SaveInstitutionAsync(r));
+app.MapPost("/api/placements", (Placement r,PlacementService service)=>service.AddAsync(r));
+app.MapGet("/api/institutions", async (EngineDb db) => await db.Institutions.AsNoTracking().OrderBy(x=>x.Id).ToListAsync());
+app.MapPost("/api/headers/{id:guid}/payment-status", (Guid id, ChangePaymentStatus r, PaymentService service) => service.ChangeAsync(id,r));
+app.MapGet("/api/headers", async (EngineDb db) => await db.TransactionHeaders.AsNoTracking().Include(x=>x.Details).OrderByDescending(x=>x.PaymentMonth).Take(1000).ToListAsync());
 app.MapGet("/api/placements", async (EngineDb db) => await db.Placements.AsNoTracking().ToListAsync());
 app.MapPost("/api/impact/simulate", (ImpactRequest r, ImpactService service) => service.SimulateAsync(r));
 app.MapPost("/api/impact/consents", (ConsentBatch r, ImpactService service) => service.SaveConsentsAsync(r));
@@ -112,7 +123,7 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<EngineDb>();
     await EngineDb.InitializeAsync(db);
-    if (builder.Configuration.GetValue("SeedDemo", true)) { await DemoSeed.InitializeAsync(db); await ImpactService.SeedAsync(db); if (builder.Configuration.GetValue("SeedRetroDemo", true)) await scope.ServiceProvider.GetRequiredService<RetroService>().SeedAsync(); }
+    if (builder.Configuration.GetValue("SeedDemo", true)) { await DemoSeed.InitializeAsync(db); await PaymentService.SeedInstitutionsAsync(db); await ImpactService.SeedAsync(db); if (builder.Configuration.GetValue("SeedRetroDemo", true)) await scope.ServiceProvider.GetRequiredService<RetroService>().SeedAsync(); }
 }
 await app.RunAsync();
 

@@ -1,6 +1,9 @@
 **/bin/
 **/obj/
-**/data/*.db*
+**/data/
+.vs/
+.vercel/
 test-results/
-**/data/*.log
-**/data/*.log.*
+.env*
+*.db*
+*.log

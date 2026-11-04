@@ -12,6 +12,7 @@ public class MonthlyRevision
 public class RetroBatch
 {
     public string Token {get;set;}="";
+    public string InstitutionsJson {get;set;}="";
     public string RequestJson {get;set;}="";
     public string ResultJson {get;set;}="";
     public int ModelId {get;set;}

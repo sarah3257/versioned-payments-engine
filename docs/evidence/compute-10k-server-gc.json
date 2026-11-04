@@ -1,0 +1,33 @@
+{
+  "timestamp": "2026-11-04T07:54:39.9174158Z",
+  "cpu": 8,
+  "serverGc": true,
+  "reports": [
+    {
+      "placements": 10000,
+      "months": 12,
+      "calculations": 120000,
+      "components": 40,
+      "decisionRows": 200,
+      "parallelism": 1,
+      "seconds": 23.1282874,
+      "calculationsPerSecond": 5188.451610126567,
+      "p95ComputeMs": 0.359,
+      "errors": 0,
+      "scope": "in-memory only; full trace; excludes HTTP and DB; synthetic repeated template"
+    },
+    {
+      "placements": 10000,
+      "months": 12,
+      "calculations": 120000,
+      "components": 40,
+      "decisionRows": 200,
+      "parallelism": 4,
+      "seconds": 9.0677604,
+      "calculationsPerSecond": 13233.697705554727,
+      "p95ComputeMs": 0.6752,
+      "errors": 0,
+      "scope": "in-memory only; full trace; excludes HTTP and DB; synthetic repeated template"
+    }
+  ]
+}

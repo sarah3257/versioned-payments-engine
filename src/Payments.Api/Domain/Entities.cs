@@ -22,8 +22,12 @@ public class ComponentVersion
     public decimal ProfitPercent { get; set; }
     public bool UseAgreement { get; set; }
     public TaxLiability ProfitTaxLiability { get; set; }
+    public string SourceReference {get;set;}="POC";
+    public string PublishedBy {get;set;}="poc-user";
     public DateTime PublishedAtUtc { get; set; }
-    public List<ComponentItem> Items { get; set; } = [];
+    [System.ComponentModel.DataAnnotations.Schema.NotMapped] public List<ComponentItem> Items { get; set; } = [];
+    public List<MaintenanceSpecification> MaintenanceItems {get;set;}=[];
+    public List<HumanSpecification> HumanItems {get;set;}=[];
     public List<DecisionRow> Rows { get; set; } = [];
 }
 public class ComponentItem
@@ -41,6 +45,7 @@ public class DecisionRow
     public long ComponentVersionId { get; set; }
     public string RowKey { get; set; } = "";
     public string Description { get; set; } = "";
+    public bool ProfitRequired {get;set;}
     public decimal ResultAmount { get; set; }
     public string? PriceKey { get; set; }
     public TaxLiability TaxLiability { get; set; }
@@ -63,7 +68,10 @@ public class ModelVersion
     public string Name { get; set; } = "";
     public DateOnly From { get; set; }
     public DateOnly To { get; set; }
+    public string SourceReference {get;set;}="POC";
+    public string PublishedBy {get;set;}="poc-user";
     public DateTime PublishedAtUtc { get; set; }
+    public DateOnly? EndCommitment {get;set;}
     public List<ModelComponent> Components { get; set; } = [];
 }
 public class ModelComponent
@@ -85,6 +93,7 @@ public class Consent
 }
 public class PriceVersion
 {
+    public int UnitMeasureId {get;set;}=1;
     public long Id { get; set; }
     public string PriceKey { get; set; } = "";
     public int Version { get; set; }
@@ -141,6 +150,11 @@ public class TransactionHeader
     public int Institution { get; set; }
     public DateOnly PaymentMonth { get; set; }
     public string Status { get; set; } = "Pending";
+    public string PaymentStatus {get;set;}="Pending";
+    public string EntryType {get;set;}="Calculation";
+    public Guid? ReversesHeaderId {get;set;}
+    public Guid? ReplacedHeaderId {get;set;}
+    public DateTime? PaidAtUtc {get;set;}
     public decimal Total { get; set; }
     public List<TransactionDetail> Details { get; set; } = [];
 }
