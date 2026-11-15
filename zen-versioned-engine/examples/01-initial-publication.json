@@ -1,0 +1,273 @@
+{
+  "package": {
+    "requestId": "demo-initial",
+    "publisher": "POC",
+    "templates": [],
+    "components": [
+      {
+        "id": "maintenance",
+        "version": 1,
+        "name": "תחזוקה",
+        "templateId": "priced-items",
+        "templateVersion": 1,
+        "from": "2026-01-01",
+        "to": "2027-12-31",
+        "parameters": {
+          "kind": "Maintenance",
+          "profitRequired": true,
+          "tax": "Private",
+          "items": [
+            {
+              "id": "food",
+              "priceId": "food-price",
+              "factor": 1,
+              "group": "main"
+            }
+          ]
+        },
+        "source": "נתוני המחשה בלבד / POC",
+        "table": null,
+        "supersedes": null
+      },
+      {
+        "id": "human",
+        "version": 1,
+        "name": "כוח אדם",
+        "templateId": "priced-items",
+        "templateVersion": 1,
+        "from": "2026-01-01",
+        "to": "2027-12-31",
+        "parameters": {
+          "kind": "Human",
+          "profitRequired": true,
+          "tax": "Private",
+          "items": [
+            {
+              "id": "doctor",
+              "priceId": "doctor-price",
+              "factor": 0.1,
+              "group": "main"
+            }
+          ]
+        },
+        "source": "נתוני המחשה בלבד / POC",
+        "table": null,
+        "supersedes": null
+      },
+      {
+        "id": "basket",
+        "version": 1,
+        "name": "סל מבוסס כללים",
+        "templateId": "decision-payment",
+        "templateVersion": 1,
+        "from": "2026-01-01",
+        "to": "2027-12-31",
+        "parameters": {},
+        "source": "נתוני המחשה בלבד / POC",
+        "table": {
+          "columns": [
+            {
+              "id": "support",
+              "field": "supportLevel",
+              "type": "number"
+            },
+            {
+              "id": "type",
+              "field": "institutionType",
+              "type": "string"
+            }
+          ],
+          "hitPolicy": "collect",
+          "noMatch": "zero",
+          "rows": [
+            {
+              "id": "support-bonus",
+              "conditions": {
+                "support": {
+                  "field": "supportLevel",
+                  "operator": "gte",
+                  "value": 4,
+                  "to": null
+                },
+                "type": {
+                  "field": "institutionType",
+                  "operator": "any",
+                  "value": null,
+                  "to": null
+                }
+              },
+              "outputs": {
+                "amount": 50
+              },
+              "source": "נוהל סל / דוגמה 1"
+            },
+            {
+              "id": "hostel-bonus",
+              "conditions": {
+                "support": {
+                  "field": "supportLevel",
+                  "operator": "any",
+                  "value": null,
+                  "to": null
+                },
+                "type": {
+                  "field": "institutionType",
+                  "operator": "eq",
+                  "value": "Hostel",
+                  "to": null
+                }
+              },
+              "outputs": {
+                "amount": 100
+              },
+              "source": "נוהל סל / דוגמה 2"
+            }
+          ],
+          "allowOverlap": true
+        },
+        "supersedes": null
+      },
+      {
+        "id": "profit",
+        "version": 1,
+        "name": "רווח",
+        "templateId": "aggregate",
+        "templateVersion": 1,
+        "from": "2026-01-01",
+        "to": "2027-12-31",
+        "parameters": {
+          "basis": "profit",
+          "rate": 0.04,
+          "kind": "Profit",
+          "tax": "Private"
+        },
+        "source": "נתוני המחשה בלבד / POC",
+        "table": null,
+        "supersedes": null
+      },
+      {
+        "id": "tax",
+        "version": 1,
+        "name": "מיסוי",
+        "templateId": "tax-aggregate",
+        "templateVersion": 1,
+        "from": "2026-01-01",
+        "to": "2027-12-31",
+        "parameters": {
+          "basis": "tax",
+          "rate": 0.18,
+          "kind": "Tax",
+          "tax": "None"
+        },
+        "source": "נתוני המחשה בלבד / POC",
+        "table": null,
+        "supersedes": null
+      }
+    ],
+    "models": [
+      {
+        "id": "housing",
+        "version": 1,
+        "name": "מודל דיור להדגמה",
+        "agreement": "X",
+        "from": "2026-01-01",
+        "to": "2027-12-31",
+        "components": [
+          {
+            "id": "maintenance",
+            "componentId": "maintenance",
+            "layer": 1,
+            "conditions": []
+          },
+          {
+            "id": "human",
+            "componentId": "human",
+            "layer": 1,
+            "conditions": []
+          },
+          {
+            "id": "basket",
+            "componentId": "basket",
+            "layer": 2,
+            "conditions": []
+          },
+          {
+            "id": "profit",
+            "componentId": "profit",
+            "layer": 6,
+            "conditions": []
+          },
+          {
+            "id": "tax",
+            "componentId": "tax",
+            "layer": 7,
+            "conditions": []
+          }
+        ],
+        "source": "אפיון POC / נתוני המחשה",
+        "supersedes": null
+      }
+    ],
+    "references": [
+      {
+        "id": "food-price",
+        "version": 1,
+        "kind": "Maintenance",
+        "from": "2026-01-01",
+        "to": "2027-12-31",
+        "values": {
+          "amount": 1000
+        },
+        "source": "מחירון הדגמה",
+        "supersedes": null
+      },
+      {
+        "id": "doctor-price",
+        "version": 1,
+        "kind": "Human",
+        "from": "2026-01-01",
+        "to": "2027-12-31",
+        "values": {
+          "amount": 18000
+        },
+        "source": "מחירון הדגמה",
+        "supersedes": null
+      }
+    ],
+    "agreements": [
+      {
+        "institutionId": "institution-a",
+        "modelId": "housing",
+        "agreement": "X",
+        "from": "2026-01-01",
+        "to": "2027-12-31",
+        "source": "הסכמה לדוגמה",
+        "version": 1,
+        "supersedes": null
+      }
+    ]
+  },
+  "cases": [
+    {
+      "eventId": "event-1",
+      "placementId": "placement-1",
+      "institutionId": "institution-a",
+      "modelId": "housing",
+      "from": "2026-09-01",
+      "to": "2026-10-31",
+      "periods": [
+        {
+          "from": "2026-09-01",
+          "to": "2026-10-31",
+          "facts": {
+            "supportLevel": 4,
+            "institutionType": "Hostel",
+            "ownership": "Private"
+          }
+        }
+      ],
+      "forcedAgreement": null,
+      "sourceRevision": 1
+    }
+  ]
+}

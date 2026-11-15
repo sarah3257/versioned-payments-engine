@@ -1,0 +1,6 @@
+**/bin/
+**/obj/
+**/data/
+test-results/
+docs/*
+!docs/architecture-full-en.md

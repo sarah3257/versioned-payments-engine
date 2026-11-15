@@ -1,0 +1,21 @@
+{
+  "eventId": "event-1",
+  "placementId": "placement-1",
+  "institutionId": "institution-a",
+  "modelId": "housing",
+  "from": "2026-09-01",
+  "to": "2026-10-31",
+  "periods": [
+    {
+      "from": "2026-09-01",
+      "to": "2026-10-31",
+      "facts": {
+        "supportLevel": 4,
+        "institutionType": "Hostel",
+        "ownership": "Private"
+      }
+    }
+  ],
+  "forcedAgreement": null,
+  "sourceRevision": 1
+}

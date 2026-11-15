@@ -1,0 +1,65 @@
+{
+  "id": "tax-aggregate",
+  "version": 1,
+  "name": "מס לפי סוג בסיס וקבוצה",
+  "parameters": [
+    {
+      "name": "basis",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "rate",
+      "type": "number",
+      "required": true
+    },
+    {
+      "name": "kind",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "tax",
+      "type": "string",
+      "required": true
+    }
+  ],
+  "facts": [
+    {
+      "name": "ownership",
+      "type": "string",
+      "required": true
+    }
+  ],
+  "steps": [
+    {
+      "key": "basis",
+      "expression": "sum(map(item.rows, #.amount))",
+      "assert": false
+    },
+    {
+      "key": "basisKeys",
+      "expression": "map(item.rows, #.key)",
+      "assert": false
+    },
+    {
+      "key": "rate",
+      "expression": "p.rate",
+      "assert": false
+    },
+    {
+      "key": "amount",
+      "expression": "s.basis * s.rate",
+      "assert": false
+    }
+  ],
+  "outputExpression": "[{itemId: p.kind, group: item.key, kind: p.kind, amount: s.amount, profitRequired: false, tax: p.tax, basisKeys: s.basisKeys}]",
+  "explanation": "בסיס {basis} × שיעור {rate} = {amount}",
+  "forEach": "filter(previous, (p.basis == 'profit' and #.profitRequired) or (p.basis == 'tax' and #.tax == facts.ownership))",
+  "groupBy": [
+    "kind",
+    "group"
+  ],
+  "tableOutputs": null,
+  "collections": null
+}

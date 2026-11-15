@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net10.0": {
+      "rules.domain": {
+        "type": "Project"
+      }
+    }
+  }
+}

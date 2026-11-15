@@ -1,0 +1,201 @@
+{
+  "package": {
+    "requestId": "emergency-example",
+    "publisher": "POC",
+    "templates": [
+      {
+        "id": "emergency",
+        "version": 1,
+        "name": "חירום: דריסה או מחיר × מכפיל × כמות",
+        "parameters": [],
+        "facts": [
+          {
+            "name": "supportLevel",
+            "type": "number",
+            "required": true
+          },
+          {
+            "name": "quantity",
+            "type": "number",
+            "required": true
+          }
+        ],
+        "steps": [
+          {
+            "key": "prices",
+            "expression": "filter(refs, #.id == item.priceId)",
+            "assert": false
+          },
+          {
+            "key": "validPrice",
+            "expression": "item.override != null or len(s.prices) == 1",
+            "assert": true
+          },
+          {
+            "key": "quantity",
+            "expression": "facts[item.quantityField]",
+            "assert": false
+          },
+          {
+            "key": "amount",
+            "expression": "item.override != null ? item.override : s.prices[0].values.amount * item.multiplier * s.quantity",
+            "assert": false
+          }
+        ],
+        "outputExpression": "[{itemId: item.rowId, group: 'main', kind: 'Emergency', amount: s.amount, profitRequired: false, tax: 'None'}]",
+        "explanation": "חירום: שורה {item}, כמות {quantity}, סכום {amount}",
+        "forEach": "tableRows",
+        "groupBy": null,
+        "tableOutputs": [
+          {
+            "name": "priceId",
+            "type": "string",
+            "role": "reference",
+            "required": true
+          },
+          {
+            "name": "multiplier",
+            "type": "number",
+            "role": "multiplier",
+            "required": true
+          },
+          {
+            "name": "quantityField",
+            "type": "string",
+            "role": "input",
+            "required": true
+          },
+          {
+            "name": "override",
+            "type": "number",
+            "role": "override",
+            "required": false
+          }
+        ],
+        "collections": null
+      }
+    ],
+    "components": [
+      {
+        "id": "emergency",
+        "version": 1,
+        "name": "תשלום חירום",
+        "templateId": "emergency",
+        "templateVersion": 1,
+        "from": "2026-01-01",
+        "to": "2027-12-31",
+        "parameters": {},
+        "source": "נוהל חירום לדוגמה",
+        "table": {
+          "columns": [
+            {
+              "id": "support",
+              "field": "supportLevel",
+              "type": "number"
+            }
+          ],
+          "hitPolicy": "collect",
+          "noMatch": "zero",
+          "rows": [
+            {
+              "id": "emergency-price",
+              "conditions": {
+                "support": {
+                  "field": "supportLevel",
+                  "operator": "gte",
+                  "value": 4,
+                  "to": null
+                }
+              },
+              "outputs": {
+                "priceId": "food-price",
+                "multiplier": 0.1,
+                "quantityField": "quantity",
+                "override": null
+              },
+              "source": "סעיף חירום לדוגמה"
+            }
+          ],
+          "allowOverlap": false
+        },
+        "supersedes": null
+      }
+    ],
+    "models": [
+      {
+        "id": "housing",
+        "version": 2,
+        "name": "מודל דיור להדגמה",
+        "agreement": "X",
+        "from": "2026-01-01",
+        "to": "2027-12-31",
+        "components": [
+          {
+            "id": "maintenance",
+            "componentId": "maintenance",
+            "layer": 1,
+            "conditions": []
+          },
+          {
+            "id": "human",
+            "componentId": "human",
+            "layer": 1,
+            "conditions": []
+          },
+          {
+            "id": "basket",
+            "componentId": "basket",
+            "layer": 2,
+            "conditions": []
+          },
+          {
+            "id": "profit",
+            "componentId": "profit",
+            "layer": 6,
+            "conditions": []
+          },
+          {
+            "id": "tax",
+            "componentId": "tax",
+            "layer": 7,
+            "conditions": []
+          },
+          {
+            "id": "emergency",
+            "componentId": "emergency",
+            "layer": 2,
+            "conditions": []
+          }
+        ],
+        "source": "אפיון POC / נתוני המחשה",
+        "supersedes": 1
+      }
+    ],
+    "references": [],
+    "agreements": []
+  },
+  "cases": [
+    {
+      "eventId": "event-1",
+      "placementId": "placement-1",
+      "institutionId": "institution-a",
+      "modelId": "housing",
+      "from": "2026-09-01",
+      "to": "2026-09-30",
+      "periods": [
+        {
+          "from": "2026-09-01",
+          "to": "2026-10-31",
+          "facts": {
+            "supportLevel": 4,
+            "institutionType": "Hostel",
+            "ownership": "Private",
+            "quantity": 2
+          }
+        }
+      ],
+      "forcedAgreement": null,
+      "sourceRevision": 1
+    }
+  ]
+}

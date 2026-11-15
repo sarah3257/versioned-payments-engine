@@ -1,0 +1,105 @@
+{
+  "id": "priced-items",
+  "version": 1,
+  "name": "פריטים לפי מחירון וכמות",
+  "parameters": [
+    {
+      "name": "items",
+      "type": "array",
+      "required": true
+    },
+    {
+      "name": "kind",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "profitRequired",
+      "type": "boolean",
+      "required": true
+    },
+    {
+      "name": "tax",
+      "type": "string",
+      "required": true
+    }
+  ],
+  "facts": [],
+  "steps": [
+    {
+      "key": "prices",
+      "expression": "filter(refs, #.id == item.priceId)",
+      "assert": false
+    },
+    {
+      "key": "onePrice",
+      "expression": "len(s.prices) == 1",
+      "assert": true
+    },
+    {
+      "key": "price",
+      "expression": "s.prices[0].values.amount",
+      "assert": false
+    },
+    {
+      "key": "timePolicy",
+      "expression": "item.timePolicy ?? p.timePolicy ?? 'calendar'",
+      "assert": false
+    },
+    {
+      "key": "knownTimePolicy",
+      "expression": "s.timePolicy in ['calendar', 'none', 'activity', 'shortStay']",
+      "assert": true
+    },
+    {
+      "key": "timeFactor",
+      "expression": "s.timePolicy == 'none' ? 1 : s.timePolicy == 'shortStay' ? period.days / 30.4167 : s.timePolicy == 'activity' ? facts.activityFactor : period.factor",
+      "assert": false
+    },
+    {
+      "key": "factor",
+      "expression": "item.factor",
+      "assert": false
+    },
+    {
+      "key": "amount",
+      "expression": "s.price * s.factor * s.timeFactor",
+      "assert": false
+    }
+  ],
+  "outputExpression": "[{itemId: item.id, group: item.group, kind: p.kind, amount: s.amount, profitRequired: p.profitRequired, tax: p.tax}]",
+  "explanation": "מחיר {price} × כמות/מקדם {factor} × חלק תקופה {timeFactor} = {amount}",
+  "forEach": "p.items",
+  "groupBy": null,
+  "tableOutputs": null,
+  "collections": [
+    {
+      "path": "items",
+      "fields": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "priceId",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "factor",
+          "type": "number",
+          "required": true
+        },
+        {
+          "name": "group",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "referenceFields": [
+        "priceId"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "id": "decision-payment",
+  "version": 1,
+  "name": "תשלום לפי שורות החלטה",
+  "parameters": [],
+  "facts": [
+    {
+      "name": "supportLevel",
+      "type": "number",
+      "required": true
+    },
+    {
+      "name": "institutionType",
+      "type": "string",
+      "required": true
+    }
+  ],
+  "steps": [
+    {
+      "key": "amount",
+      "expression": "item.amount * period.factor",
+      "assert": false
+    }
+  ],
+  "outputExpression": "[{itemId: item.rowId, group: 'main', kind: 'Basket', amount: s.amount, profitRequired: false, tax: 'Private'}]",
+  "explanation": "שורת החלטה {item}; סכום יחסי {amount}",
+  "forEach": "tableRows",
+  "groupBy": null,
+  "tableOutputs": [
+    {
+      "name": "amount",
+      "type": "number",
+      "role": "value",
+      "required": true
+    }
+  ],
+  "collections": null
+}
